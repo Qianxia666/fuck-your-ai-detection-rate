@@ -79,6 +79,15 @@ coverage/
 # Local raw design exports; app uses app/public/brand-logo.png
 /Fuck your AI detection rate.png
 
+# 单文件 exe 打包产物
+dist-exe/
+build-temp/
+.venv-build/
+packaging/*.spec.bak
+
+# 便携模式运行时数据（配置、文档、导出）
+FYADR-data/
+
 # Editor / local config
 .vscode/
 .idea/

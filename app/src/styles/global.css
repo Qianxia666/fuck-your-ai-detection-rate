@@ -24,7 +24,8 @@
     --input: 35 12% 82%;
     --ring: 222 47% 24%;
     --radius: 0.5rem;
-    --sidebar-background: 40 24% 97%;
+    --overlay: 222 35% 12% / 0.34;
+    --sidebar-background: 0 0% 100%;
     --sidebar-foreground: 222 28% 22%;
     --sidebar-primary: 222 47% 24%;
     --sidebar-primary-foreground: 40 24% 98%;
@@ -37,9 +38,9 @@
   .dark {
     --background: 222 28% 8%;
     --foreground: 40 18% 94%;
-    --card: 222 24% 11%;
+    --card: 222 24% 13%;
     --card-foreground: 40 18% 94%;
-    --popover: 222 24% 11%;
+    --popover: 222 24% 13%;
     --popover-foreground: 40 18% 94%;
     --primary: 215 32% 88%;
     --primary-foreground: 222 35% 12%;
@@ -51,9 +52,10 @@
     --accent-foreground: 40 18% 94%;
     --destructive: 0 72% 45%;
     --destructive-foreground: 40 18% 96%;
-    --border: 221 17% 21%;
-    --input: 221 17% 23%;
+    --border: 221 18% 25%;
+    --input: 221 18% 27%;
     --ring: 215 32% 76%;
+    --overlay: 0 0% 0% / 0.62;
     --sidebar-background: 222 28% 9%;
     --sidebar-foreground: 40 16% 91%;
     --sidebar-primary: 215 32% 88%;
@@ -74,9 +76,53 @@
 
   body {
     @apply h-svh overflow-hidden bg-background font-sans text-foreground antialiased;
+    text-rendering: optimizeLegibility;
   }
 
   #root {
     @apply h-svh overflow-hidden;
+  }
+
+  ::selection {
+    background-color: hsl(var(--primary) / 0.16);
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+}
+
+@layer utilities {
+  /* 首屏两个入口卡片共用的轻微入场动作。 */
+  .enter-rise {
+    animation: enter-rise 0.34s cubic-bezier(0.22, 0.68, 0.35, 1) both;
+  }
+
+  .enter-rise-late {
+    animation-delay: 70ms;
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@keyframes enter-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .enter-rise {
+    animation-duration: 1ms;
+    animation-delay: 0ms;
   }
 }

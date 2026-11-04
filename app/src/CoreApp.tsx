@@ -282,7 +282,7 @@ export function CoreApp() {
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
-                <BreadcrumbPage>{pageLabel}</BreadcrumbPage>
+                <BreadcrumbPage className="text-[13px] font-medium tracking-tight">{pageLabel}</BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>
@@ -292,7 +292,7 @@ export function CoreApp() {
         </header>
         <Separator />
 
-        <main className="min-h-0 flex-1 overflow-hidden p-3 md:p-4">
+        <main className="min-h-0 flex-1 overflow-hidden bg-muted/40 p-3 md:p-4">
           {!settings || bootstrapping ? (
             <div className="flex h-full items-center justify-center">
               {error && !settings ? (

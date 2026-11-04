@@ -39,6 +39,7 @@ export interface PromptTemplate {
 
 export interface CoreSettings {
   schemaVersion: number;
+  maxTextChars?: number;
   defaultModelProfileId: string;
   modelProfiles: ModelProfile[];
   promptTemplates: PromptTemplate[];
@@ -118,6 +119,7 @@ export interface CoreDocument {
   id: string;
   name: string;
   kind: "docx" | "txt";
+  origin?: "upload" | "text";
   sourceSize: number;
   paragraphs: DocumentParagraph[];
   scopeConfirmed: boolean;
@@ -255,6 +257,7 @@ export interface RecentDocument {
   id: string;
   name: string;
   kind: "docx" | "txt";
+  origin?: "upload" | "text";
   latestRunId: string;
   latestRunStatus?: CoreRun["status"] | "";
   latestRunProgress?: { completed: number; total: number };

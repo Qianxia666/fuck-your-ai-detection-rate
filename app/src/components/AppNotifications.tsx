@@ -41,7 +41,7 @@ export function AppNotificationProvider({ children }: { children: ReactNode }) {
   return (
     <NotificationContext.Provider value={context}>
       {children}
-      <Toaster position="top-right" />
+      <Toaster position="bottom-center" />
     </NotificationContext.Provider>
   );
 }
