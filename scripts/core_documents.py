@@ -35,6 +35,10 @@ XML_SPACE = f"{{{XML_NS}}}space"
 MAX_RECENT_DOCUMENTS = 20
 SCOPE_CLASSIFIER_VERSION = 13
 DEFAULT_CHUNK_PRESET = "standard"
+MAX_TEXT_INPUT_CHARS = 300_000
+TEXT_SOURCE_FILENAME = "pasted-text.txt"
+TEXT_DOCUMENT_FALLBACK_NAME = "粘贴的文本"
+TXT_PARAGRAPH_RE = re.compile(r"[^\r\n]+(?:\r?\n(?!\r?\n)[^\r\n]+)*")
 CHUNK_PRESETS: dict[str, dict[str, tuple[int, int, int, int]]] = {
     "fine": {
         "default": (180, 160, 280, 60),
@@ -990,6 +994,7 @@ def _import_docx(path: Path, filename: str, document_id: str) -> dict[str, Any]:
         "id": document_id,
         "name": Path(filename).name,
         "kind": "docx",
+        "origin": "upload",
         "sourcePath": str(path),
         "sourceHash": _sha256(path),
         "sourceSize": path.stat().st_size,
@@ -1076,10 +1081,16 @@ def _decode_txt(path: Path) -> str:
     raise DocumentError("TXT 编码无法识别，请另存为 UTF-8 后重试。")
 
 
-def _import_txt(path: Path, filename: str, document_id: str) -> dict[str, Any]:
-    content = _decode_txt(path)
+def _txt_paragraphs(content: str) -> list[dict[str, Any]]:
+    """Split plain text into rewriteable paragraphs.
+
+    Consecutive non-empty lines stay in one paragraph, exactly as a TXT upload
+    behaves.  Paragraph-internal chunking then handles longer blocks, so pasted
+    text and uploaded TXT files always produce the same structure.
+    """
+
     paragraphs: list[dict[str, Any]] = []
-    for index, match in enumerate(re.finditer(r"[^\r\n]+(?:\r?\n(?!\r?\n)[^\r\n]+)*", content)):
+    for index, match in enumerate(TXT_PARAGRAPH_RE.finditer(content)):
         text = match.group(0)
         if not text.strip():
             continue
@@ -1099,12 +1110,24 @@ def _import_txt(path: Path, filename: str, document_id: str) -> dict[str, Any]:
                 "textNodeCount": 1,
             }
         )
+    return paragraphs
+
+
+def _build_txt_document(
+    content: str,
+    display_name: str,
+    document_id: str,
+    path: Path,
+    origin: str,
+) -> dict[str, Any]:
+    paragraphs = _txt_paragraphs(content)
     if not paragraphs:
         raise DocumentError("TXT 中没有可改写的正文。")
     return {
         "id": document_id,
-        "name": Path(filename).name,
+        "name": display_name,
         "kind": "txt",
+        "origin": origin,
         "sourcePath": str(path),
         "sourceHash": _sha256(path),
         "sourceSize": path.stat().st_size,
@@ -1115,6 +1138,70 @@ def _import_txt(path: Path, filename: str, document_id: str) -> dict[str, Any]:
         "createdAt": _now(),
         "updatedAt": _now(),
     }
+
+
+def _import_txt(path: Path, filename: str, document_id: str) -> dict[str, Any]:
+    content = _decode_txt(path)
+    return _build_txt_document(content, Path(filename).name, document_id, path, "upload")
+
+
+def max_text_input_chars() -> int:
+    """粘贴文本的字符上限，可用 FYADR_MAX_TEXT_CHARS 覆盖。"""
+
+    raw = os.getenv("FYADR_MAX_TEXT_CHARS", "").strip()
+    if not raw:
+        return MAX_TEXT_INPUT_CHARS
+    try:
+        value = int(raw)
+    except ValueError:
+        return MAX_TEXT_INPUT_CHARS
+    return value if value > 0 else MAX_TEXT_INPUT_CHARS
+
+
+def _text_document_name(title: str, content: str) -> str:
+    candidate = " ".join(str(title or "").split())
+    if not candidate:
+        candidate = next((line.strip() for line in content.split("\n") if line.strip()), "")
+    candidate = candidate.strip().strip("　")
+    if not candidate:
+        return TEXT_DOCUMENT_FALLBACK_NAME
+    if len(candidate) > 28:
+        candidate = f"{candidate[:28].rstrip()}…"
+    return candidate
+
+
+def import_text(text: str, title: str = "") -> dict[str, Any]:
+    """Create a document from pasted plain text without touching the upload path."""
+
+    content = str(text or "").replace("\r\n", "\n").replace("\r", "\n")
+    if not content.strip():
+        raise DocumentError("请输入需要改写的正文。")
+    limit = max_text_input_chars()
+    if len(content) > limit:
+        raise DocumentError(f"文本过长，目前最多支持 {limit} 个字符。")
+    document_id = f"doc-{uuid.uuid4().hex}"
+    target_dir = sources_dir() / document_id
+    target_dir.mkdir(parents=True, exist_ok=False)
+    source_path = target_dir / TEXT_SOURCE_FILENAME
+    try:
+        source_path.write_text(content, encoding="utf-8")
+        document = _build_txt_document(
+            content,
+            _text_document_name(title, content),
+            document_id,
+            source_path,
+            "text",
+        )
+        # The pasted text is already the intended scope, so the extra
+        # "确认正文" step is skipped; the range can still be edited later.
+        document["scopeConfirmed"] = True
+        document["requiresRangeConfirmation"] = False
+        save_document(document)
+        _trim_recent_documents()
+        return public_document(document)
+    except Exception:
+        shutil.rmtree(target_dir, ignore_errors=True)
+        raise
 
 
 def _shorten(value: str, limit: int = 96) -> str:

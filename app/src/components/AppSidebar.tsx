@@ -7,6 +7,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuBadge,
@@ -51,8 +52,8 @@ export function AppSidebar({ activePage, onPageChange, runtimeStatus, progressPe
             <SidebarMenuButton size="lg" tooltip="FYADR" onClick={() => navigate("rewrite")}>
               <img src="/brand-logo-96.webp" alt="" className="size-9 rounded-md object-contain" />
               <span className="grid min-w-0 flex-1 text-left leading-tight">
-                <span className="truncate font-semibold">FYADR</span>
-                <span className="truncate text-xs">文档改写平台</span>
+                <span className="truncate font-semibold tracking-tight">FYADR</span>
+                <span className="truncate text-xs text-muted-foreground">文档改写平台</span>
               </span>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -61,6 +62,7 @@ export function AppSidebar({ activePage, onPageChange, runtimeStatus, progressPe
 
       <SidebarContent>
         <SidebarGroup>
+          <SidebarGroupLabel>工作台</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {WORKBENCH_NAV_ITEMS.map((item) => {
@@ -72,6 +74,7 @@ export function AppSidebar({ activePage, onPageChange, runtimeStatus, progressPe
                       aria-current={activePage === item.id ? "page" : undefined}
                       tooltip={item.label}
                       onClick={() => navigate(item.id)}
+                      className="data-[active=true]:font-medium"
                     >
                       <Icon />
                       <span>{item.label}</span>

@@ -114,6 +114,9 @@ export const coreService = {
     return requestJson<CoreDocument>("/api/documents", { method: "POST", body });
   },
 
+  createTextDocument: (value: { text: string; name?: string }): Promise<CoreDocument> =>
+    requestJson<CoreDocument>("/api/documents/text", json("POST", value)),
+
   getDocument: (id: string) => requestJson<CoreDocument>(`/api/documents/${encodeURIComponent(id)}`),
 
   saveScope: (id: string, selectedParagraphIds: string[]) =>

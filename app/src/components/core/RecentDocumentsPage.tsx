@@ -355,7 +355,9 @@ export function RecentDocumentsPage({ activeDocument, activeRun, onOpen, onDelet
         <div className="min-w-0 flex-1">
           <div className="truncate font-medium">{activeItem.name}</div>
           <div className="mt-2 flex flex-wrap gap-2">
-            <Badge variant="outline">{activeItem.kind.toUpperCase()}</Badge>
+            <Badge variant="outline">
+              {activeItem.origin === "text" ? "粘贴文本" : activeItem.kind.toUpperCase()}
+            </Badge>
             <Badge variant={activeItem.latestRunStatus === "completed" ? "default" : activeItem.canResume ? "secondary" : "outline"}>
               {runStatusLabel(activeItem.latestRunStatus)}
             </Badge>

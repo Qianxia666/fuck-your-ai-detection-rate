@@ -28,8 +28,10 @@ from core_documents import (
     FormatFidelityError,
     delete_document,
     import_document,
+    import_text,
     list_recent_documents,
     load_document,
+    max_text_input_chars,
     public_document,
     update_scope,
 )
@@ -98,7 +100,9 @@ def health() -> Response:
 
 @app.get("/api/settings")
 def get_settings() -> Response:
-    return jsonify(public_config())
+    config = public_config()
+    config["maxTextChars"] = max_text_input_chars()
+    return jsonify(config)
 
 
 @app.put("/api/settings/preferences")
@@ -195,6 +199,16 @@ def upload_document() -> tuple[Response, int]:
     if upload is None or not upload.filename:
         return error("请选择 DOCX 或 TXT 文件。", 400)
     document = import_document(upload.stream, upload.filename)
+    return jsonify(document), 201
+
+
+@app.post("/api/documents/text")
+def create_text_document() -> tuple[Response, int]:
+    payload = request.get_json(silent=True) or {}
+    text = payload.get("text")
+    if not isinstance(text, str):
+        return error("请提供需要改写的正文。", 400)
+    document = import_text(text, str(payload.get("name") or ""))
     return jsonify(document), 201
 
 

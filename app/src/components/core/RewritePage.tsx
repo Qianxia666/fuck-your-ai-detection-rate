@@ -1,20 +1,25 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   Check,
   CircleStop,
+  ClipboardType,
   Download,
   Ellipsis,
   FilePenLine,
   FileText,
   FolderOpen,
+  Layers,
   Play,
   RefreshCw,
   Settings2,
   ShieldCheck,
+  SlidersHorizontal,
+  Upload,
 } from "lucide-react";
 
 import { useAppNotifications } from "@/components/AppNotifications";
+import { PlainTextEditor } from "@/components/core/PlainTextImport";
 import { ReviewWorkspace, type ReviewWarningFocusRequest } from "@/components/core/ReviewWorkspace";
 import { ScopeEditor } from "@/components/core/ScopeEditor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -163,6 +168,28 @@ function initialRoundTemplateIds(settings: CoreSettings): string[] {
   return configured.length ? configured : fallback ? [fallback, fallback] : [];
 }
 
+function EntryHeader({
+  icon,
+  title,
+  description,
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="flex items-start gap-3">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-primary [&_svg:not([class*='size-'])]:size-4">
+        {icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="text-[15px] font-medium leading-6">{title}</div>
+        <p className="text-pretty text-[13px] leading-5 text-muted-foreground">{description}</p>
+      </div>
+    </div>
+  );
+}
+
 export function RewritePage({
   settings,
   document,
@@ -188,7 +215,11 @@ export function RewritePage({
   const [concurrency, setConcurrency] = useState(settings.preferences.rewriteConcurrency || 1);
   const [chunkPreset, setChunkPreset] = useState<ChunkPreset>(settings.preferences.chunkPreset || "standard");
   const [protectedTerms, setProtectedTerms] = useState(settings.preferences.protectedTerms.join("，"));
-  const [busy, setBusy] = useState<"upload" | "scope" | "start" | "cancel" | "resume" | "continue" | "export" | "">("");
+  const [pastedText, setPastedText] = useState("");
+  const [textDialogOpen, setTextDialogOpen] = useState(false);
+  const [busy, setBusy] = useState<
+    "upload" | "text" | "scope" | "start" | "cancel" | "resume" | "continue" | "export" | ""
+  >("");
   const [scopeOpen, setScopeOpen] = useState(false);
   const [taskSheetOpen, setTaskSheetOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -307,6 +338,32 @@ export function RewritePage({
     if (!document || run) return;
     setSelectedIds(new Set(document.paragraphs.filter((paragraph) => paragraph.selected).map((paragraph) => paragraph.id)));
     setScopeOpen(true);
+  };
+
+  const submitText = async () => {
+    if (!pastedText.trim() || busy) return;
+    if (run && ACTIVE_STATUSES.has(run.status)) {
+      notify({ kind: "warning", title: "请先停止当前任务" });
+      return;
+    }
+    setBusy("text");
+    try {
+      const value = await coreService.createTextDocument({ text: pastedText });
+      onDocumentChange(value);
+      onRunChange(null);
+      setPastedText("");
+      setTextDialogOpen(false);
+      setTaskSheetOpen(true);
+      notify({
+        kind: "success",
+        title: "文本已准备好",
+        text: `${value.selectedCount} 段待改写，选好模型就可以开始。`,
+      });
+    } catch (reason) {
+      notify({ kind: "error", title: "文本未能读取", text: messageOf(reason) });
+    } finally {
+      setBusy("");
+    }
   };
 
   const closeScope = () => {
@@ -558,8 +615,14 @@ export function RewritePage({
   const taskSettings = !run || run.status === "completed" ? (
     <Tabs defaultValue="rewrite" className="flex flex-col gap-4">
       <TabsList className="grid w-full grid-cols-2">
-        <TabsTrigger value="rewrite">改写</TabsTrigger>
-        <TabsTrigger value="processing">处理</TabsTrigger>
+        <TabsTrigger value="rewrite">
+          <FilePenLine />
+          改写
+        </TabsTrigger>
+        <TabsTrigger value="processing">
+          <SlidersHorizontal />
+          处理
+        </TabsTrigger>
       </TabsList>
 
       <TabsContent value="rewrite" className="m-0">
@@ -633,16 +696,18 @@ export function RewritePage({
             </Field>
           ))}
 
-          <ButtonGroup className="w-full">
-            <Button variant="outline" className="flex-1" onClick={() => onNavigate("models")}>
-              <Settings2 data-icon="inline-start" />
-              模型
-            </Button>
-            <Button variant="outline" className="flex-1" onClick={() => onNavigate("prompts")}>
-              <FilePenLine data-icon="inline-start" />
-              提示词
-            </Button>
-          </ButtonGroup>
+          {availableModelProfiles.length ? (
+            <ButtonGroup className="w-full">
+              <Button variant="ghost" size="sm" className="flex-1" onClick={() => onNavigate("models")}>
+                <Settings2 data-icon="inline-start" />
+                模型连接
+              </Button>
+              <Button variant="ghost" size="sm" className="flex-1" onClick={() => onNavigate("prompts")}>
+                <FilePenLine data-icon="inline-start" />
+                提示词
+              </Button>
+            </ButtonGroup>
+          ) : null}
         </FieldGroup>
       </TabsContent>
 
@@ -745,14 +810,17 @@ export function RewritePage({
   );
 
   const documentPreview = selectedParagraphs.length ? (
-    <ScrollArea className="h-full bg-muted/40" data-testid="rewrite-manuscript-preview">
-      <div className="mx-auto min-h-full w-full max-w-4xl p-4 md:p-6">
-        <Card className="min-h-full">
+    <div
+      className="h-full overflow-y-auto bg-muted/40"
+      data-testid="rewrite-manuscript-preview"
+    >
+      <div className="mx-auto flex min-h-full w-full max-w-none flex-col p-4 md:p-6">
+        <Card className="flex min-h-0 flex-1 flex-col">
           <CardHeader className="sr-only">
             <CardTitle>{document?.name}</CardTitle>
           </CardHeader>
-          <CardContent className="p-6 md:p-10">
-            <article className="flex flex-col gap-6">
+          <CardContent className="flex-1 px-6 py-8 md:px-10 md:py-12">
+            <article className="mx-auto flex max-w-[40rem] flex-col gap-6">
               {selectedParagraphs.map((paragraph) => (
                 <p key={paragraph.id} className="whitespace-pre-wrap break-words text-base leading-8">
                   {paragraph.text}
@@ -762,7 +830,7 @@ export function RewritePage({
           </CardContent>
         </Card>
       </div>
-    </ScrollArea>
+    </div>
   ) : (
     <Empty className="h-full border">
       <EmptyHeader>
@@ -826,36 +894,107 @@ export function RewritePage({
       />
 
       {!document ? (
-        <div className="h-full bg-muted/40 p-3 md:p-6">
-          <Card className={cn("mx-auto h-full max-w-5xl", dragging && "bg-muted")}>
-            <CardContent className="h-full p-0">
-              <Empty
-                className="h-full border-0"
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  setDragging(true);
-                }}
-                onDragLeave={() => setDragging(false)}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  setDragging(false);
-                  void upload(event.dataTransfer.files[0]);
-                }}
-              >
-                <EmptyHeader>
-                  <EmptyMedia variant="icon"><FileText /></EmptyMedia>
-                  <EmptyTitle>选择文档</EmptyTitle>
-                  <EmptyDescription>DOCX 或 TXT</EmptyDescription>
-                </EmptyHeader>
-                <EmptyContent>
-                  <Button disabled={busy === "upload"} onClick={() => fileInput.current?.click()}>
-                    {busy === "upload" ? <Spinner data-icon="inline-start" /> : <FolderOpen data-icon="inline-start" />}
-                    选择文件
-                  </Button>
-                </EmptyContent>
-              </Empty>
-            </CardContent>
-          </Card>
+        <div data-testid="rewrite-landing" className="flex h-full min-h-0 flex-col overflow-hidden">
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+            <div className="flex min-h-full w-full max-w-6xl flex-col gap-4">
+              <header className="flex shrink-0 flex-col gap-1.5">
+                <h1 className="text-[22px] font-semibold leading-8 tracking-tight">开始改写</h1>
+                <p className="max-w-2xl text-pretty text-[13px] leading-6 text-muted-foreground">
+                  上传 Word 文档保留原排版，也可以把正文直接粘进来。两种方式都会先确认范围，再逐段审阅。
+                </p>
+              </header>
+
+              <div className="grid gap-3 lg:min-h-0 lg:flex-1 lg:grid-cols-2">
+                <Card
+                  className={cn(
+                    "enter-rise flex min-h-[17rem] flex-col overflow-hidden transition-shadow duration-200",
+                    dragging && "ring-2 ring-primary/25",
+                  )}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    setDragging(true);
+                  }}
+                  onDragLeave={(event) => {
+                    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+                    setDragging(false);
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    setDragging(false);
+                    void upload(event.dataTransfer.files[0]);
+                  }}
+                >
+                  <CardHeader className="p-4 pb-3 md:p-5 md:pb-3">
+                    <EntryHeader
+                      icon={<Upload />}
+                      title="上传文档"
+                      description="保留 Word 原排版，导出时原样回填。"
+                    />
+                  </CardHeader>
+                  <CardContent className="flex min-h-0 flex-1 flex-col p-4 pt-0 md:p-5 md:pt-0">
+                    <Empty
+                      className={cn(
+                        "flex-1 gap-3 rounded-md border border-dashed border-border bg-muted/30 p-6 text-center transition-colors duration-200",
+                        dragging && "border-primary bg-primary/5",
+                      )}
+                    >
+                      <EmptyHeader className="gap-2">
+                        <EmptyMedia
+                          variant="icon"
+                          className="mb-1 size-12 rounded-xl border border-border bg-background text-muted-foreground [&_svg:not([class*='size-'])]:size-5"
+                        >
+                          <FileText />
+                        </EmptyMedia>
+                        <EmptyTitle className="text-base font-medium">选择文档</EmptyTitle>
+                        <EmptyDescription className="text-[13px] leading-5">
+                          点下面的按钮选择，或直接把文件拖到这里。
+                        </EmptyDescription>
+                      </EmptyHeader>
+                    </Empty>
+                    <div className="mt-3 flex items-center justify-between gap-3">
+                      <span className="text-[13px] text-muted-foreground">DOCX / TXT · 最大 40 MB</span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={busy === "upload" || busy === "text"}
+                        onClick={() => fileInput.current?.click()}
+                      >
+                        {busy === "upload" ? <Spinner data-icon="inline-start" /> : <FolderOpen data-icon="inline-start" />}
+                        选择文件
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="enter-rise enter-rise-late flex min-h-[17rem] flex-col overflow-hidden">
+                  <CardHeader className="p-4 pb-3 md:p-5 md:pb-3">
+                    <EntryHeader
+                      icon={<ClipboardType />}
+                      title="粘贴文字"
+                      description="不用先存成文件，粘进来就能改写。"
+                    />
+                  </CardHeader>
+                  <CardContent className="flex min-h-0 flex-1 flex-col p-4 pt-0 md:p-5 md:pt-0">
+                    <PlainTextEditor
+                      value={pastedText}
+                      onChange={setPastedText}
+                      onSubmit={() => void submitText()}
+                      busy={busy === "text"}
+                      autoFocus
+                      maxChars={settings.maxTextChars}
+                    />
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="flex shrink-0 items-start gap-2 text-[13px] leading-5 text-muted-foreground">
+                <ShieldCheck className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                <p className="text-pretty">
+                  文档、任务进度和导出结果都保存在本机；改写时正文片段会发送到你配置的模型接口。
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       ) : (
         <div
@@ -867,7 +1006,9 @@ export function RewritePage({
             <ItemContent className="min-w-0">
               <ItemTitle className="max-w-full truncate">{document.name}</ItemTitle>
               <ItemDescription className="line-clamp-1">
-                {document.kind.toUpperCase()} · {fileSize(document.sourceSize)} · {selectedIds.size} 段
+                {document.origin === "text" ? "粘贴文本" : document.kind.toUpperCase()}
+                {" · "}
+                {fileSize(document.sourceSize)} · {selectedIds.size} 段
               </ItemDescription>
             </ItemContent>
             <ItemActions className="shrink-0">
@@ -911,6 +1052,13 @@ export function RewritePage({
                       <RefreshCw />
                       更换文档
                     </DropdownMenuItem>
+                    <DropdownMenuItem
+                      disabled={Boolean(run && ACTIVE_STATUSES.has(run.status)) || busy === "text"}
+                      onSelect={() => setTextDialogOpen(true)}
+                    >
+                      <ClipboardType />
+                      粘贴新文本
+                    </DropdownMenuItem>
                     {document.kind === "docx" ? (
                       <DropdownMenuItem onSelect={() => onNavigate("protection")}>
                         <ShieldCheck />
@@ -933,8 +1081,10 @@ export function RewritePage({
         <SheetContent data-testid="rewrite-task-sheet" className="flex w-full flex-col sm:max-w-md">
           <SheetHeader>
             <SheetTitle>{run?.status === "completed" ? "继续改写" : run ? statusLabel(run.status) : "改写设置"}</SheetTitle>
-            <SheetDescription className="sr-only">
-              {run?.status === "completed" ? "选择下一轮改写设置" : run ? "任务操作" : "选择本次改写设置"}
+            <SheetDescription className="truncate text-[13px]">
+              {document
+                ? `${selectedIds.size} 段 · ${document.name}`
+                : "选择本次改写设置"}
             </SheetDescription>
           </SheetHeader>
           {!run || run.status === "completed" ? (
@@ -1053,6 +1203,26 @@ export function RewritePage({
               {pendingExport === "docx" ? "继续导出 Word" : "继续导出 TXT"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={textDialogOpen} onOpenChange={setTextDialogOpen}>
+        <DialogContent className="grid max-h-[calc(100svh-1rem)] max-w-2xl grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>粘贴文字</DialogTitle>
+            <DialogDescription>
+              把要改写的正文粘进来，空行分段。会替换工作区里的当前文档，原文档仍保留在最近文档中。
+            </DialogDescription>
+          </DialogHeader>
+          <PlainTextEditor
+            value={pastedText}
+            onChange={setPastedText}
+            onSubmit={() => void submitText()}
+            busy={busy === "text"}
+            autoFocus
+            textareaId="plain-text-input-dialog"
+            maxChars={settings.maxTextChars}
+          />
         </DialogContent>
       </Dialog>
     </>
